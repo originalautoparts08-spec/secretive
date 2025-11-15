@@ -16,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let migrator = SecureEnclave.CryptoKitMigrator()
         try? migrator.migrate(to: cryptoKit)
         list.add(store: cryptoKit)
-        list.add(store: SmartCard.Store())
+//        list.add(store: SmartCard.Store())
         return list
     }()
     private let updater = Updater(checkOnLaunch: true)
