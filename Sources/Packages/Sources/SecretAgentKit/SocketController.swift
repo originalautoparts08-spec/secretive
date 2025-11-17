@@ -37,12 +37,19 @@ public struct SocketController {
         port = SocketPort(path: path)
         fileHandle = FileHandle(fileDescriptor: port.socket, closeOnDealloc: true)
         Task { [fileHandle, sessionsContinuation, logger] in
+            logger.debug("Starting socket controller task")
             for await notification in NotificationCenter.default.notifications(named: .NSFileHandleConnectionAccepted) {
                 logger.debug("Socket controller accepted connection")
-                guard let new = notification.userInfo?[NSFileHandleNotificationFileHandleItem] as? FileHandle else { continue }
+                guard let new = notification.userInfo?[NSFileHandleNotificationFileHandleItem] as? FileHandle else {
+                    logger.error("FileHandle not present in user info.")
+                    continue
+                }
                 let session = Session(fileHandle: new)
+                logger.debug("Yielding session")
                 sessionsContinuation.yield(session)
+                logger.debug("Yielded session")
                 await fileHandle.acceptConnectionInBackgroundAndNotifyOnMainActor()
+                logger.debug("Session waiting for connection.")
             }
         }
         fileHandle.acceptConnectionInBackgroundAndNotify(forModes: [RunLoop.Mode.common])
@@ -74,11 +81,15 @@ extension SocketController {
         /// Initializes a new Session.
         /// - Parameter fileHandle: The FileHandle used to communicate with the socket.
         init(fileHandle: FileHandle) {
+            logger.debug("Initializing session.")
             self.fileHandle = fileHandle
             provenance = SigningRequestTracer().provenance(from: fileHandle)
+            logger.debug("Traced provenance.")
             (messages, messagesContinuation) = AsyncStream.makeStream()
             Task { [messagesContinuation, logger] in
+                logger.debug("Starting Session task.")
                 for await _ in NotificationCenter.default.notifications(named: .NSFileHandleDataAvailable, object: fileHandle) {
+                    logger.debug("Session received data avilable message.")
                     let data = fileHandle.availableData
                     guard !data.isEmpty else {
                         logger.debug("Socket controller received empty data, ending continuation.")
@@ -90,7 +101,8 @@ extension SocketController {
                     logger.debug("Socket controller yielded data.")
                 }
             }
-            Task {
+            Task { [logger] in
+                logger.debug("Session waiting for data.")
                 await fileHandle.waitForDataInBackgroundAndNotifyOnMainActor()
             }
         }
